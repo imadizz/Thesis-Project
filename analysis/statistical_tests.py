@@ -1,23 +1,12 @@
-"""
-analysis/statistical_tests.py
-Formal significance testing of camera-only vs full-fusion congestion
-classification. Reports a McNemar test and a paired bootstrap confidence
-interval on the accuracy difference.
-
-This supports the dissertation statement that adding GPS/fusion features does
-NOT produce a statistically significant improvement over camera-only features.
-
-Outputs:
-    results/statistical_tests.json
-
-Usage:
-    python -m analysis.statistical_tests --records results/bdd100k_records.json
-"""
+# Is the camera-vs-fusion accuracy difference actually significant, or just
+# noise? McNemar test + a bootstrap CI on the difference. Used to back up the
+# claim in the dissertation that fusion didn't help in a meaningful way.
 
 import argparse
 import json
 import os
 import sys
+from math import comb
 
 import numpy as np
 
@@ -29,32 +18,25 @@ import config
 from fusion.feature_engineering import build_feature_matrix
 from classifiers.train_classifiers import build_pipelines
 
-# Indices 0-8 are the 9 camera-group features (see feature_engineering order).
-CAMERA_IDX = list(range(9))
+camera_cols = list(range(9))   # first 9 features are the camera group
 
 
 def mcnemar(correct_a, correct_b):
-    """
-    McNemar test on two boolean correctness vectors.
-    b = A wrong, B right ; c = A right, B wrong.
-    Uses the exact binomial form for robustness on small discordant counts.
-    """
+    # b = a wrong / b right, c = a right / b wrong
     b = int(np.sum(~correct_a & correct_b))
     c = int(np.sum(correct_a & ~correct_b))
     n = b + c
     if n == 0:
         return {'b': b, 'c': c, 'statistic': 0.0, 'p_value': 1.0}
-    # Exact two-sided binomial p-value with p=0.5
-    from math import comb
+    # exact two-sided binomial, p=0.5
     k = min(b, c)
-    tail = sum(comb(n, i) for i in range(0, k + 1)) * (0.5 ** n)
+    tail = sum(comb(n, i) for i in range(k + 1)) * (0.5 ** n)
     p = min(1.0, 2.0 * tail)
-    stat = (abs(b - c) - 1) ** 2 / n  # continuity-corrected chi-square
+    stat = (abs(b - c) - 1) ** 2 / n   # chi-square with continuity correction
     return {'b': b, 'c': c, 'statistic': float(stat), 'p_value': float(p)}
 
 
-def paired_bootstrap(correct_a, correct_b, n_boot=10000, seed=42):
-    """Bootstrap CI on accuracy difference (B - A)."""
+def bootstrap_diff(correct_a, correct_b, n_boot=10000, seed=42):
     rng = np.random.default_rng(seed)
     n = len(correct_a)
     diffs = np.empty(n_boot)
@@ -67,64 +49,58 @@ def paired_bootstrap(correct_a, correct_b, n_boot=10000, seed=42):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--records', default='results/bdd100k_records.json')
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--records', default='results/bdd100k_records.json')
+    args = ap.parse_args()
 
-    with open(args.records) as f:
-        records = json.load(f)
-
+    records = json.load(open(args.records))
     X, y = build_feature_matrix(records)
     X = X.astype(np.float64)
     y = np.array(y)
 
-    X_train, X_test, y_train, y_test = train_test_split(
+    Xtr, Xte, ytr, yte = train_test_split(
         X, y, test_size=config.TEST_SPLIT,
         random_state=config.RANDOM_SEED, stratify=y)
 
-    # Full fusion model
-    gb_full = build_pipelines()['GradientBoosting']
-    gb_full.fit(X_train, y_train)
-    pred_full = gb_full.predict(X_test)
+    # full model
+    full = build_pipelines()['GradientBoosting']
+    full.fit(Xtr, ytr)
+    pred_full = full.predict(Xte)
 
-    # Camera-only model (same hyperparameters, 9 features)
-    gb_cam = build_pipelines()['GradientBoosting']
-    gb_cam.fit(X_train[:, CAMERA_IDX], y_train)
-    pred_cam = gb_cam.predict(X_test[:, CAMERA_IDX])
+    # camera-only, same hyperparameters
+    cam = build_pipelines()['GradientBoosting']
+    cam.fit(Xtr[:, camera_cols], ytr)
+    pred_cam = cam.predict(Xte[:, camera_cols])
 
-    correct_cam  = (pred_cam  == y_test)
-    correct_full = (pred_full == y_test)
+    ok_cam  = (pred_cam == yte)
+    ok_full = (pred_full == yte)
+    acc_cam, acc_full = float(ok_cam.mean()), float(ok_full.mean())
 
-    acc_cam  = float(correct_cam.mean())
-    acc_full = float(correct_full.mean())
-
-    mc = mcnemar(correct_cam, correct_full)
-    bs = paired_bootstrap(correct_cam, correct_full)
+    mc = mcnemar(ok_cam, ok_full)
+    bs = bootstrap_diff(ok_cam, ok_full)
+    sig = mc['p_value'] < 0.05
 
     result = {
-        'n_test': int(len(y_test)),
+        'n_test': int(len(yte)),
         'accuracy_camera_only': acc_cam,
         'accuracy_full_fusion': acc_full,
         'accuracy_difference_pp': (acc_full - acc_cam) * 100,
         'mcnemar': mc,
         'bootstrap_95ci': bs,
-        'significant_at_0.05': bool(mc['p_value'] < 0.05),
+        'significant_at_0.05': bool(sig),
     }
 
     os.makedirs(config.RESULTS_DIR, exist_ok=True)
     out = os.path.join(config.RESULTS_DIR, 'statistical_tests.json')
-    with open(out, 'w') as f:
-        json.dump(result, f, indent=2)
+    json.dump(result, open(out, 'w'), indent=2)
 
-    print(f"Camera-only accuracy : {acc_cam*100:.2f}%")
-    print(f"Full fusion accuracy : {acc_full*100:.2f}%")
-    print(f"Difference           : {(acc_full-acc_cam)*100:+.2f} pp")
-    print(f"McNemar p-value      : {mc['p_value']:.4f}")
-    print(f"Bootstrap 95% CI     : [{bs['ci_low']*100:+.2f}, {bs['ci_high']*100:+.2f}] pp")
-    verdict = ("significant" if result['significant_at_0.05']
-               else "NOT statistically significant")
-    print(f"Conclusion           : difference is {verdict} at alpha=0.05")
-    print(f"Wrote {out}")
+    print(f'camera-only : {acc_cam*100:.2f}%')
+    print(f'full fusion : {acc_full*100:.2f}%')
+    print(f'difference  : {(acc_full-acc_cam)*100:+.2f} pp')
+    print(f'McNemar p   : {mc["p_value"]:.4f}')
+    print(f'bootstrap CI : [{bs["ci_low"]*100:+.2f}, {bs["ci_high"]*100:+.2f}] pp')
+    print('=>', 'significant' if sig else 'not significant', 'at alpha=0.05')
+    print('saved', out)
 
 
 if __name__ == '__main__':

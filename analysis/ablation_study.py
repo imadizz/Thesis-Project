@@ -1,19 +1,6 @@
-"""
-analysis/ablation_study.py
-Feature-group ablation for the congestion classifier. Trains Gradient Boosting
-on four feature subsets and reports accuracy / precision / recall / F1.
-
-    Camera only
-    Camera + Kalman (fusion group)
-    Camera + GPS
-    Full Fusion (all 27 features)
-
-Output:
-    results/ablation_study.csv
-
-Usage:
-    python -m analysis.ablation_study --records results/bdd100k_records.json
-"""
+# Ablation over the four feature groups. Trains GB on each subset so we can see
+# how much GPS / Kalman / context actually add on top of the camera features.
+#   python -m analysis.ablation_study --records results/bdd100k_records.json
 
 import argparse
 import json
@@ -31,28 +18,26 @@ import config
 from fusion.feature_engineering import build_feature_matrix
 from classifiers.train_classifiers import build_pipelines
 
-# Feature-group column indices (see feature_engineering build order)
-CAMERA  = list(range(0, 9))
-GPS     = list(range(9, 14))
-FUSION  = list(range(14, 18))
-CONTEXT = list(range(18, 27))
+# column ranges for each feature group (see build order in feature_engineering)
+camera  = list(range(0, 9))
+gps     = list(range(9, 14))
+fusion  = list(range(14, 18))
+context = list(range(18, 27))
 
-CONFIGS = [
-    ('Camera only',     CAMERA),
-    ('Camera + Kalman', CAMERA + FUSION),
-    ('Camera + GPS',    CAMERA + GPS),
-    ('Full Fusion',     CAMERA + GPS + FUSION + CONTEXT),
+configs = [
+    ('Camera only',     camera),
+    ('Camera + Kalman', camera + fusion),
+    ('Camera + GPS',    camera + gps),
+    ('Full Fusion',     camera + gps + fusion + context),
 ]
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--records', default='results/bdd100k_records.json')
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--records', default='results/bdd100k_records.json')
+    args = ap.parse_args()
 
-    with open(args.records) as f:
-        records = json.load(f)
-
+    records = json.load(open(args.records))
     X, y = build_feature_matrix(records)
     X = X.astype(np.float64)
     y = np.array(y)
@@ -63,10 +48,11 @@ def main():
 
     os.makedirs(config.RESULTS_DIR, exist_ok=True)
     out = os.path.join(config.RESULTS_DIR, 'ablation_study.csv')
+
     with open(out, 'w') as f:
         f.write('configuration,n_features,accuracy,precision_macro,recall_macro,f1_macro\n')
-        print('Ablation study (Gradient Boosting):')
-        for label, cols in CONFIGS:
+        print('Ablation (Gradient Boosting):')
+        for label, cols in configs:
             gb = build_pipelines()['GradientBoosting']
             gb.fit(Xtr[:, cols], ytr)
             pred = gb.predict(Xte[:, cols])
@@ -74,9 +60,9 @@ def main():
             p, r, f1, _ = precision_recall_fscore_support(
                 yte, pred, average='macro', zero_division=0)
             f.write(f'{label},{len(cols)},{acc:.4f},{p:.4f},{r:.4f},{f1:.4f}\n')
-            print(f'  {label:18s} ({len(cols):2d} feat): '
-                  f'acc {acc*100:5.2f}%  F1 {f1*100:5.2f}')
-    print(f'Wrote {out}')
+            print(f'  {label:18s} ({len(cols):2d} feat)  acc {acc*100:.2f}%  f1 {f1*100:.2f}')
+
+    print('saved', out)
 
 
 if __name__ == '__main__':
