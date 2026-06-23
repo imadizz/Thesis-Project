@@ -7,7 +7,12 @@ Dataset: https://bdd-data.berkeley.edu/ (detection task, 70K frames)
 import json
 import os
 from pathlib import Path
-from pcu_scoring import PCU_WEIGHTS, compute_pcu_score, RollingNormaliser, assign_congestion_class
+try:
+    from data_preparation.pcu_scoring import (
+        PCU_WEIGHTS, compute_pcu_score, RollingNormaliser, assign_congestion_class)
+except ImportError:
+    from pcu_scoring import (
+        PCU_WEIGHTS, compute_pcu_score, RollingNormaliser, assign_congestion_class)
 
 RELEVANT_CATEGORIES = set(PCU_WEIGHTS.keys())
 

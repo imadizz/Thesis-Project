@@ -7,7 +7,12 @@ Dataset: https://www.cvlibs.net/datasets/kitti/eval_object.php
 
 import os
 from pathlib import Path
-from pcu_scoring import PCU_WEIGHTS, compute_pcu_score, RollingNormaliser, assign_congestion_class
+try:
+    from data_preparation.pcu_scoring import (
+        PCU_WEIGHTS, compute_pcu_score, RollingNormaliser, assign_congestion_class)
+except ImportError:
+    from pcu_scoring import (
+        PCU_WEIGHTS, compute_pcu_score, RollingNormaliser, assign_congestion_class)
 
 # Map KITTI category names to PCU categories
 KITTI_TO_PCU = {
@@ -63,9 +68,9 @@ def build_kitti_records(label_dir: str) -> list[dict]:
 
         records.append({
             'frame':     frame_id,
-            'weather':   'clear',       # KITTI: no weather metadata
-            'scene':     'urban',
-            'timeofday': 'daytime',     # KITTI: recorded daytime only
+            'weather':   'clear',         # KITTI: no weather metadata
+            'scene':     'city street',   # KITTI urban scenes map to city street
+            'timeofday': 'daytime',       # KITTI: recorded daytime only
             'counts':    counts,
             'raw_pcu':   raw_pcu,
             'norm_pcu':  norm_pcu,

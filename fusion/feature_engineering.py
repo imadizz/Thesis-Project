@@ -12,12 +12,22 @@ Feature groups:
 
 import numpy as np
 from collections import deque
-from kalman_filter import AdaptiveKalman
+
+# Dual-mode import: works as a package (from fusion.kalman_filter) and when the
+# fusion/ directory is run directly (from kalman_filter).
+try:
+    from fusion.kalman_filter import AdaptiveKalman
+except ImportError:
+    from kalman_filter import AdaptiveKalman
 
 # Encoding maps for categorical metadata
 WEATHER_CODE  = {'clear': 0, 'overcast': 1, 'rainy': 2, 'foggy': 3, 'snowy': 4}
 TIMEOFDAY_CODE = {'daytime': 0, 'dawn/dusk': 1, 'night': 2}
-SCENE_CODE     = {'highway': 0, 'city street': 1, 'residential': 2, 'tunnel': 3}
+# 'urban' is an alias for 'city street' so KITTI (which labels every frame
+# 'urban') encodes to the same scene as BDD100K city streets, instead of
+# silently falling back to highway (code 0).
+SCENE_CODE     = {'highway': 0, 'city street': 1, 'residential': 2, 'tunnel': 3,
+                  'urban': 1}
 
 # Estimated baseline speeds km/h by scene and time (synthesised from US traffic surveys)
 SPEED_BASELINE = {
@@ -25,12 +35,14 @@ SPEED_BASELINE = {
     ('highway',     'night'):    95.0,
     ('city street', 'daytime'):  50.0,
     ('city street', 'night'):    55.0,
+    ('urban',       'daytime'):  50.0,   # alias of city street (KITTI)
+    ('urban',       'night'):    55.0,
     ('residential', 'daytime'):  40.0,
     ('residential', 'night'):    40.0,
     ('tunnel',      'daytime'):  60.0,
     ('tunnel',      'night'):    60.0,
 }
-RUSH_HOUR_SCENES = {'city street', 'residential'}
+RUSH_HOUR_SCENES = {'city street', 'urban', 'residential'}
 
 
 def is_rush_hour(timeofday: str, scene: str) -> int:
