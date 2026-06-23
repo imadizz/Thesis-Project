@@ -35,11 +35,12 @@ This repository contains all code for my MSc dissertation. The project investiga
 
 | Metric | Value |
 |--------|-------|
-| Best classifier (BDD100K) | **94.7%** — Gradient Boosting (full fusion, 27 features) |
-| Camera-only baseline | 90.5% (9 camera features only) |
-| Fusion improvement | +4.2 percentage points |
-| MODERATE class improvement | +5.8 percentage points |
-| KITTI cross-dataset accuracy | 81.3% (zero-shot, Gradient Boosting) |
+| Best classifier (BDD100K) | **99.1%** — Gradient Boosting (full fusion, 27 features) |
+| Camera-only baseline | 99.2% (9 camera features only) |
+| Fusion difference | -0.1 pp (camera-only and full fusion are essentially equivalent) |
+| KITTI cross-dataset accuracy | 89.4% (zero-shot transfer, Gradient Boosting) |
+| Domain gap (BDD100K → KITTI) | 9.7 percentage points |
+| Top feature | car count (47.2% importance) |
 | V2V journey time saving (0% packet loss) | **18.6%** — analytical simulation, 100% penetration |
 | V2V journey time saving (60% packet loss) | 7.6% |
 | GPS features | Synthesised from metadata (not real GPS traces) |
