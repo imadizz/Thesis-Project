@@ -35,13 +35,14 @@ This repository contains all code for my MSc dissertation. The project investiga
 
 | Metric | Value |
 |--------|-------|
-| Best classifier (BDD100K) | **94.7%** — Gradient Boosting |
-| Camera-only baseline | 90.5% |
+| Best classifier (BDD100K) | **94.7%** — Gradient Boosting (full fusion, 27 features) |
+| Camera-only baseline | 90.5% (9 camera features only) |
 | Fusion improvement | +4.2 percentage points |
 | MODERATE class improvement | +5.8 percentage points |
-| KITTI cross-dataset accuracy | 81.3% (zero-shot) |
-| V2V journey time saving (0% packet loss) | **18.4%** |
-| V2V journey time saving (60% packet loss) | 5.2% |
+| KITTI cross-dataset accuracy | 81.3% (zero-shot, Gradient Boosting) |
+| V2V journey time saving (0% packet loss) | **18.6%** — analytical simulation, 100% penetration |
+| V2V journey time saving (60% packet loss) | 7.6% |
+| GPS features | Synthesised from metadata (not real GPS traces) |
 
 ---
 
@@ -67,8 +68,9 @@ Thesis-Project/
 │   └── cross_dataset.py        # BDD100K -> KITTI zero-shot transfer
 │
 ├── simulation/
-│   ├── v2v_routing.py          # SUMO TraCI V2V routing protocol
-│   └── run_simulation.py       # Batch simulation runner
+│   ├── v2v_analytical.py       # Standalone probabilistic simulation (results in dissertation)
+│   ├── v2v_routing.py          # SUMO TraCI V2V routing protocol (optional, requires SUMO)
+│   └── run_simulation.py       # Batch runner for the SUMO version
 │
 ├── figures/                    # Result figures from the dissertation
 ├── requirements.txt
@@ -85,7 +87,8 @@ cd Thesis-Project
 pip install -r requirements.txt
 ```
 
-For the V2V simulation, install [SUMO](https://sumo.dlr.de/docs/Installing/index.html) and set `SUMO_HOME`.
+The analytical simulation (`v2v_analytical.py`) requires no additional install beyond the packages above.
+To run the optional SUMO TraCI version, install [SUMO](https://sumo.dlr.de/docs/Installing/index.html) and set `SUMO_HOME`.
 
 ---
 
@@ -118,9 +121,19 @@ python classifiers/cross_dataset.py \
     --kitti_records results/kitti_records.json
 ```
 
-### 4. V2V routing simulation
+### 4. V2V routing simulation (reproduces dissertation results)
+
+The dissertation results (18.6% saving at 0% loss, 7.6% at 60% loss) were produced
+by the standalone analytical simulation — no SUMO installation needed:
 
 ```bash
+python simulation/v2v_analytical.py --packet_loss 0 0.2 0.4 0.6 --n_trips 500
+```
+
+An optional SUMO TraCI version is also included for future work with a real road network:
+
+```bash
+# Requires SUMO installed and SUMO_HOME set
 python simulation/run_simulation.py \
     --config simulation/njnyc.sumocfg \
     --packet_loss 0 0.2 0.4 0.6 \
